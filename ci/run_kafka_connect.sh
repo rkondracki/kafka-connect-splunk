@@ -3,37 +3,25 @@
 # Checkout, build and run kafka-connect-splunk in the fight
 
 curdir=`pwd`
-git clone git@github.com:splunk/kafka-connect-splunk.git
+git clone https://github.com/splunk/kafka-connect-splunk.git
 
 branch=${KAFKA_CONNECT_BRANCH:-develop}
 # build the package
 cd kafka-connect-splunk && git checkout ${branch} && bash build.sh
-
-# untar the package
-tar xzf kafka-connect-splunk*.tar.gz
-cd kafka-connect-splunk
-
-sed -i"" "s@bootstrap.servers=.*@bootstrap.servers=$KAFKA_BOOTSTRAP_SERVERS@g" config/connect-distributed.properties
+cd /kafka-connect
+cp kafka-connect-splunk/target/splunk-kafka-connect-v*.jar /kafka-connect/
+echo "plugin.path=/kafka-connect" >> /kafka-connect/kafka/config/connect-distributed.properties
 
 debug=${KAFKA_CONNECT_LOGGING:-DEBUG}
 echo "log4j.logger.com.splunk=${debug}" >> config/connect-log4j.properties
 
-git clone https://github.com/chenziliang/proc_monitor && git checkout develop
+cd kafka
 
-duration=${SLEEP:-300}
-sleep ${duration}
+echo "Start ZooKeeper"
+bin/zookeeper-server-start.sh config/zookeeper.properties > /kafka-connect/logs/zookeeper.txt 2>&1 &
 
-echo "Run fix hosts"
-bash ${curdir}/kafka-connect-splunk/ci/fix_hosts.sh > /tmp/fixhosts 2>&1 &
-
-echo "Run proc monitor"
-cd proc_monitor
-python proc_monitor.py 2>&1 &
-cd ..
+echo "Start kafka server"
+bin/kafka-server-start.sh config/server.properties > /kafka-connect/logs/kafka.txt 2>&1 &
 
 echo "Run connect"
-while :
-do
-    ./bin/connect-distributed.sh config/connect-distributed.properties
-    sleep 1
-done
+./bin/connect-distributed.sh config/connect-distributed.properties > /kafka-connect/logs/kafka_connect.txt
